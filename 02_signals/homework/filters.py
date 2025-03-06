@@ -18,12 +18,19 @@ def conv_nested(image, kernel):
     Hi, Wi = image.shape
     Hk, Wk = kernel.shape
     out = np.zeros((Hi, Wi))
+    for i in range(Hi):
+        for j in range(Wi):
+            for k in range(-(Hk // 2), Hk // 2 + 1):
+                for l in range(-(Wk // 2), Wk // 2 + 1):
+                    if j + l >= 0 and i + k >= 0 and j + l < Wi and i + k < Hi:
+                        out[i, j] += image[i + k, j + l] * \
+                            kernel[Hk//2 - k, Wk//2 - l]
 
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    # YOUR CODE HERE
+    # END YOUR CODE
 
     return out
+
 
 def zero_pad(image, pad_height, pad_width):
     """ Zero-pad an image.
@@ -44,11 +51,8 @@ def zero_pad(image, pad_height, pad_width):
     """
 
     H, W = image.shape
-    out = np.zeros_like(image)
-
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    out = np.zeros((H + pad_height * 2, W + pad_width * 2))
+    out[pad_height: H + pad_height, pad_width: W + pad_width] = image
     return out
 
 
@@ -75,11 +79,14 @@ def conv_fast(image, kernel):
     Hk, Wk = kernel.shape
     out = np.zeros((Hi, Wi))
 
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
-
+    true_kernel = np.flip(kernel)
+    padded_image = zero_pad(image, Hk // 2, Wk // 2)
+    for i in range(Hi):
+        for j in range(Wi):
+            region = padded_image[i: i + Hk, j: j + Wk]
+            out[i, j] = np.sum(region * true_kernel)
     return out
+
 
 def conv_faster(image, kernel):
     """
@@ -90,15 +97,32 @@ def conv_faster(image, kernel):
     Returns:
         out: numpy array of shape (Hi, Wi).
     """
+
+    def _circular_extension_2d(kernel, num_rows, num_cols):
+        kernel_radius_v = kernel.shape[0] // 2
+        kernel_radius_h = kernel.shape[1] // 2
+
+        kernel_padded = np.zeros((num_rows, num_cols), dtype=kernel.dtype)
+        kernel_padded[:kernel.shape[0], :kernel.shape[1]] = kernel
+        kernel_padded = np.roll(
+            kernel_padded, shift=(-kernel_radius_v, -kernel_radius_h), axis=(0, 1)
+        )
+        return kernel_padded
+
     Hi, Wi = image.shape
-    Hk, Wk = kernel.shape
-    out = np.zeros((Hi, Wi))
 
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    padded_image = np.zeros((max(Hi, Wi) + 1, max(Hi, Wi) + 1))
+    padded_image[:Hi, :Wi] = image
+    padded_kernel = _circular_extension_2d(
+        kernel, max(Hi, Wi) + 1, max(Hi, Wi) + 1)
 
-    return out
+    f_image = np.fft.fft2(padded_image)
+    f_kernel = np.fft.fft2(padded_kernel)
+    f_out = f_image * f_kernel
+    out = np.real(np.fft.ifft2(f_out))
+
+    return out[:Hi, :Wi]
+
 
 def cross_correlation(f, g):
     """ Cross-correlation of f and g.
@@ -112,13 +136,8 @@ def cross_correlation(f, g):
     Returns:
         out: numpy array of shape (Hf, Wf).
     """
+    return conv_faster(f, np.flip(g))
 
-    out = np.zeros_like(f)
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
-
-    return out
 
 def zero_mean_cross_correlation(f, g):
     """ Zero-mean cross-correlation of f and g.
@@ -134,13 +153,8 @@ def zero_mean_cross_correlation(f, g):
     Returns:
         out: numpy array of shape (Hf, Wf).
     """
+    return conv_faster(f, np.flip(g - np.mean(g)))
 
-    out = np.zeros_like(f)
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
-
-    return out
 
 def normalized_cross_correlation(f, g):
     """ Normalized cross-correlation of f and g.
@@ -158,10 +172,17 @@ def normalized_cross_correlation(f, g):
     Returns:
         out: numpy array of shape (Hf, Wf).
     """
+    Hi, Wi = f.shape
+    Hk, Wk = g.shape
+    out = np.zeros((Hi, Wi))
 
-    out = np.zeros_like(f)
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    padded_image = zero_pad(f, Hk // 2, Wk // 2)
+
+    g = (g - np.mean(g)) / np.std(g)
+    for i in range(Hi):
+        for j in range(Wi):
+            region = padded_image[i: i + Hk, j: j + Wk]
+            region = (region - np.mean(region)) / np.std(region)
+            out[i, j] = np.sum(region * g)
 
     return out
